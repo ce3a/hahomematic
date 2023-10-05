@@ -23,6 +23,9 @@ _CONTEXT: Final = "context"
 _ENCODING_ISO_8859_1: Final = "ISO-8859-1"
 _TLS: Final = "tls"
 _VERIFY_TLS: Final = "verify_tls"
+
+_ASYNC_REQUEST_TIMEOUT: Final = 30
+
 _VALID_XMLRPC_COMMANDS_ON_NO_CONNECTION: Final[tuple[str, ...]] = (
     "getVersion",
     "init",
@@ -94,16 +97,20 @@ class XmlRpcProxy(xmlrpc.client.ServerProxy):
             ):
                 args = _cleanup_args(*args)
                 _LOGGER.debug("__ASYNC_REQUEST: %s", args)
-                result = await self._async_add_proxy_executor_job(
-                    # pylint: disable=protected-access
-                    parent._ServerProxy__request,  # type: ignore[attr-defined]
-                    self,
-                    *args,
-                )
+                async with asyncio.timeout(_ASYNC_REQUEST_TIMEOUT):
+                    result = await self._async_add_proxy_executor_job(
+                        # pylint: disable=protected-access
+                        parent._ServerProxy__request,  # type: ignore[attr-defined]
+                        self,
+                        *args,
+                    )
                 _LOGGER.debug("__ASYNC_RESPONE: %s => %s", args, result)
                 self._connection_state.remove_issue(issuer=self, iid=self.interface_id)
                 return result
             raise NoConnection(f"No connection to {self.interface_id}")
+        except TimeoutError as toerr:
+            _LOGGER.debug("TimeoutError: %s", args)
+            raise ClientException(toerr) from toerr
         except SSLError as sslerr:
             message = f"SSLError on {self.interface_id}: {reduce_args(args=sslerr.args)}"
             if sslerr.args[0] in _SSL_ERROR_CODES:
