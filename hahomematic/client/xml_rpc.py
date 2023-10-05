@@ -100,6 +100,7 @@ class XmlRpcProxy(xmlrpc.client.ServerProxy):
                     self,
                     *args,
                 )
+                _LOGGER.debug("__ASYNC_RESPONE: %s => %s", args, result)
                 self._connection_state.remove_issue(issuer=self, iid=self.interface_id)
                 return result
             raise NoConnection(f"No connection to {self.interface_id}")
